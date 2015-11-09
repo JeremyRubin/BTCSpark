@@ -1,0 +1,5 @@
+*.ipynb
+*.pyc
+blocks/
+test/
+
