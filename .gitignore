@@ -1,5 +1,11 @@
 *.ipynb
 *.pyc
 blocks/
+catblocks/
+block/
 test/
+*.pem
+*.csv
+dbs/
 
+cluster/credentials
