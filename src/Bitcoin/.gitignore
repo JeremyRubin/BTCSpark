@@ -1,0 +1,6 @@
+BTCLib.egg-info/
+BTCLib/*.c
+BTCLib/*.so
+build/
+dist/
+.Python
