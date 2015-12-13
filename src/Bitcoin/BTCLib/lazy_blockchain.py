@@ -417,8 +417,20 @@ class Blocks(object):
 if __name__ == "__main__":
     for i in sys.argv[1:]:
         # print i
-        e = Blocks.of_file_full(i, False)
-        print e[0]().txns().to_list()[0]()
+        e = Blocks.of_file_full(i,  True)
+        a = e.next()
+        b = a().txns().to_list()[0]().tx_outs().map
+        print b
+        # print e[0]().txns().to_list()[0]()
+        # txns = block_objs.flatMap(lambda b: 
+        #                   iter(b().txns()))\
+        #                  .map(lambda txn: txn())
+        # # Transaction Output Amount Distribution
+        # txns.flatMap(lambda txn: txn.tx_outs()\
+        #     .map(lambda lazy_txo: lazy_txo())\
+        #     .map(lambda txo: ((txo.value>>14)<<14, 1)))\
+        #     .reduceByKey(lambda x,y: x+y)\
+        #     .saveAsTextFile(result_name("txouts_values"))
         
         # print        e
         # print e
