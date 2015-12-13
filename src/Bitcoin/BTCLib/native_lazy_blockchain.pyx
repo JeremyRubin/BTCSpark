@@ -431,6 +431,7 @@ cdef class Transactions(__ManyMixin__):
 #####################
 ##   Block Header  ##
 #####################
+DEF FIXED_HEADER_BYTES = 80 # 4+32+32+4+4+4
 cdef class BlockHeader:
     cdef readonly int32_t version
     cdef readonly bytes prev_block
@@ -454,15 +455,14 @@ cdef class BlockHeader:
         self.txn_count = txn_count
     def __reduce__(self):
         return BlockHeader, (self.version, self.prev_block, self.merkle_root, self.block_hash, self.timestamp, self.bits, self.nonce, self.txn_count)
-    DEF FIXED_HEADER_BYTES = 80 # 4+32+32+4+4+4
     FMT = Struct("<i 32s 32s I I I")
 
     @staticmethod
     cdef BlockHeader of_buffer(bytes data, size_t * offset):
-        header = data[offset[0]:offset[0]+BlockHeader.FIXED_HEADER_BYTES]
+        header = data[offset[0]:offset[0]+FIXED_HEADER_BYTES]
         block_hash = double_sha256(header) 
         version, prev_block, merkle_root, timestamp, bits, nonce  = BlockHeader.FMT.unpack( header)
-        offset[0] += BlockHeader.FIXED_HEADER_BYTES
+        offset[0] += FIXED_HEADER_BYTES
         txn_count = VAR_INT(data, offset)
         return BlockHeader(version, prev_block, merkle_root,
                      block_hash, timestamp, bits, nonce,

@@ -84,13 +84,14 @@ class Node:
             self.height = 0
         return self.height
 
+unlazy = lambda x: x()
 
 if __name__ == "__main__":
     import sys
     result_name = result_name_maker()
     sb = SparkBlock()
     # sb.no_warn()
-    block_objs = sb.fetch_chain()
+    block_objs = sb.fetch_chain().map(unlazy)
 
     # sys.setrecursionlimit(10**6)
     # parent_child = block_objs.map(lambda b: b()).map(lambda b: ( b.header.prev_block, b.header.block_hash)).collect()
@@ -113,12 +114,11 @@ if __name__ == "__main__":
     #     .reduceByKey(lambda x,y: x+y)\
     #     .saveAsTextFile(result_name("txouts_values"))
             
-    unlazy = lambda x: x()
-#    coinbases = block_objs.map(unlazy)\
-#                          .map(lambda b: b.txns[0]().tx_ins[0]().signature_script)\
-#                          .filter(lambda f: "BIP100" in f)\
-#                          .saveAsTextFile(result_name("BIP100_Blocks"))
-    txns = block_objs.map(unlazy)\
+    coinbases = block_objs\
+                          .map(lambda b: b.txns[0]().tx_ins[0]().signature_script)\
+                          .filter(lambda f: "BIP100" in f)\
+                          .saveAsTextFile(result_name("BIP100_Blocks"))
+    txns = block_objs\
                      .flatMap(lambda b: 
                           b.txns)\
                      .map(unlazy)
