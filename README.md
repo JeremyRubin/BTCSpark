@@ -44,6 +44,9 @@ Finding the BIP100 Blocks takes 5.0 minutes on the same cluster.
               .saveAsTextFile(result_name("BIP100_Blocks"))
 ```
 
+Note: Unless you have a lot of memory, or you've reduced the working set largely,
+it isn't recommended to use caching as the overhead of re-parsing isn't horrible.
+
 License
 -------
 
