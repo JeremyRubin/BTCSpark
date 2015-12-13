@@ -29,6 +29,8 @@ cdef class __ManyMixin__:
     cdef readonly object l
     def __init__(self, l):
         self.l = l
+    def __reduce__(self):
+        return self.__class__, self.l
     cpdef to_list(self):
         return self.l
     def __getitem__(self, sl):
@@ -73,6 +75,8 @@ cdef class LazyTransactionInputOutPoint:
         self.offset = o
     def __call__(self):
         return TransactionInputOutPoint.of_buffer(self.a, &self.offset)
+    def __reduce__(self):
+        return (self.__class__, (self.a, self.offset))
 ctypedef uint8_t hashv[32]
 cdef class TransactionInputOutPoint:
     cdef readonly bytes hash
@@ -80,16 +84,18 @@ cdef class TransactionInputOutPoint:
     property hex_hash:
         def __get__(self):
             return bytes(self.hash[::-1]).encode('hex')
-    
-
+    def __cinit__(self, h,i):
+        self.hash = h
+        self.index = i
+    def __reduce__(self):
+        return (TransactionInputOutPoint, (self.a, self.offset))
     @staticmethod
     cdef of_buffer(bytes a, size_t * offset):
-        r = TransactionInputOutPoint()
-        r.hash =  a[offset[0]:offset[0]+32]
+        cdef bytes hash =  a[offset[0]:offset[0]+32]
         offset[0]+=32
-        r.index = UINT32_T(a, offset)
+        cdef uint32_t index = UINT32_T(a, offset)
         offset[0]+=4
-        return r
+        return TransactionInputOutPoint(hash, index)
     @staticmethod
     cdef buffer_length(bytes a,size_t offset):
         return offset+36
@@ -100,6 +106,9 @@ cdef class TransactionInputOutPoint:
         
 
 
+#################################
+##     Transaction Input       ##
+#################################
 cdef class LazyTransactionInput:
     cdef bytes a
     cdef size_t offset
@@ -110,6 +119,8 @@ cdef class LazyTransactionInput:
         self.i = i
     def __call__(self):
         return TransactionInput.of_buffer(self.a, &self.offset, self.i)
+    def __reduce__(self):
+        return (self.__class__, (self.a, self.offset, self.i))
 
 cdef class TransactionInput:
     cdef readonly LazyTransactionInputOutPoint _previous_output
@@ -117,11 +128,14 @@ cdef class TransactionInput:
     cdef readonly uint32_t sequence
     cdef readonly uint32_t index
 
-    #def __cinit__(self, previous_output, signature_script, sequence, index):
-    #    self.previous_output = previous_output
-    #    self.signature_script = signature_script
-    #    self.sequence = sequence
-    #    self.index = index
+    def __cinit__(self, previous_output, signature_script, sequence, index):
+        self._previous_output = previous_output
+        self.signature_script = signature_script
+        self.sequence = sequence
+        self.index = index
+    def __reduce__(self):
+        return TransactionInput, (self._previous_output, self.signature_script, self.sequence, self.index)
+
     property previous_output:
         def __get__(self):
             return self._previous_output()
@@ -138,16 +152,14 @@ cdef class TransactionInput:
             return bytes(self.signature_script).encode('hex')
     @staticmethod
     cdef of_buffer(bytes a, size_t * offset,uint32_t index):
-        r = TransactionInput()
-        r.index = index
-        r._previous_output = LazyTransactionInputOutPoint(a, offset[0])
+        cdef LazyTransactionInputOutPoint p = LazyTransactionInputOutPoint(a, offset[0])
         offset[0] += 36
         l = VAR_INT(a, offset)
-        r.signature_script = a[offset[0]:offset[0]+l]
+        cdef bytes ss = a[offset[0]:offset[0]+l]
         offset[0] +=l
-        r.sequence = UINT32_T(a, offset)#a[offset[0]:4+offset[0]])
+        cdef uint32_t s = UINT32_T(a, offset)#a[offset[0]:4+offset[0]])
         offset[0] += 4
-        return r
+        return TransactionInput(p, ss, s, index)
     @staticmethod
     cdef size_t buffer_length(bytes a, size_t offset, uint32_t index):
         offset += 36 #offset = TransactionInputOutPoint.buffer_length(a, offset)
@@ -169,6 +181,8 @@ cdef class LazyTransactionInputs:
         self.t = t
     def __call__(self):
         return TransactionInputs.of_buffer(self.a,self.t, &self.offset)
+    def __reduce__(self):
+        return (self.__class__, (self.a, self.t, self.offset))
 cdef class TransactionInputs(__ManyMixin__):
     _type = TransactionInput
     @staticmethod
@@ -195,7 +209,7 @@ cdef class TransactionInputs(__ManyMixin__):
 
 
 #################################
-##     TXO
+##     Transaction Output      ##
 #################################
 
 cdef class LazyTransactionOutput:
@@ -208,6 +222,8 @@ cdef class LazyTransactionOutput:
         self.i = i
     def __call__(self):
         return TransactionOutput.of_buffer(self.a, &self.offset, self.i)
+    def __reduce__(self):
+        return (self.__class__, (self.a, self.offset,self.i))
 cdef class TransactionOutput:
     cdef readonly int64_t value
     cdef readonly uint32_t index 
@@ -219,6 +235,8 @@ cdef class TransactionOutput:
         self.pk_script_length = pk_script_length
         self.pk_script = pk_script
         self.index = index
+    def __reduce__(self):
+        return TransactionOutput, (self.value, self.pk_script_length, self.pk_script, self.index)
     property hex_pk_script:
         def __get__(self):
             return bytes(self.pk_script).encode('hex')
@@ -255,6 +273,8 @@ cdef class LazyTransactionOutputs:
         self.t = t
     def __call__(self):
         return TransactionOutputs.of_buffer(self.a,self.t, &self.offset)
+    def __reduce__(self):
+        return (self.__class__, (self.a, self.t, self.offset))
 cdef class TransactionOutputs(__ManyMixin__):
     _type = TransactionOutput
     @staticmethod
@@ -288,13 +308,16 @@ cdef class LazyTransaction:
         self.c = c
     def __call__(self):
         return Transaction.of_buffer(self.a, &self.offset, self.c)
+    def __reduce__(self):
+        return (self.__class__, (self.a, self.offset,self.c))
 cdef class Transaction:
     cdef readonly uint64_t tx_in_count, tx_out_count
     cdef readonly LazyTransactionInputs _tx_ins
     cdef readonly LazyTransactionOutputs _tx_outs
-    cdef readonly uint32_t lock_time, index, version
+    cdef readonly uint32_t lock_time, index
+    cdef readonly int32_t version
     cdef readonly bytes tx_id
-    def __cinit__(self, uint32_t version, uint64_t tx_in_count,
+    def __cinit__(self, int32_t version, uint64_t tx_in_count,
                  LazyTransactionInputs tx_ins, uint64_t tx_out_count, LazyTransactionOutputs tx_outs,
                  uint32_t lock_time,uint32_t index,bytes tx_id):
         self.version = version
@@ -305,6 +328,8 @@ cdef class Transaction:
         self.lock_time = lock_time
         self.index = index
         self.tx_id = tx_id
+    def __reduce__(self):
+        return Transaction, (self.version, self.tx_in_count, self._tx_ins, self.tx_out_count, self._tx_outs, self.lock_time, self.index, self.tx_id)
     property tx_ins:
         def __get__(self):
             return self._tx_ins()
@@ -340,7 +365,7 @@ cdef class Transaction:
     cdef Transaction of_buffer(bytes tx, size_t * offset, uint32_t tx_count):
         cdef size_t offset_0  = offset[0]
         offset[0] += 4
-        tx_ver = UINT32_T(tx, offset)#tx[offset[0]-4:offset[0]])
+        tx_ver = INT32_T(tx, offset)#tx[offset[0]-4:offset[0]])
 
         tx_in_count = VAR_INT(tx, offset)
         tx_ins = LazyTransactionInputs(tx, tx_in_count, offset[0])
@@ -377,6 +402,8 @@ cdef class LazyTransactions:
         self.t = t
     def __call__(self):
         return Transactions.of_buffer(self.a,self.t, &self.offset)
+    def __reduce__(self):
+        return (self.__class__, (self.a, self.t, self.offset))
 cdef class Transactions(__ManyMixin__):
     _type = Transaction
 
@@ -401,8 +428,11 @@ cdef class Transactions(__ManyMixin__):
         return offset
 
 
+#####################
+##   Block Header  ##
+#####################
 cdef class BlockHeader:
-    cdef readonly uint32_t version
+    cdef readonly int32_t version
     cdef readonly bytes prev_block
     cdef readonly bytes merkle_root
     cdef readonly bytes block_hash
@@ -410,9 +440,9 @@ cdef class BlockHeader:
     cdef readonly size_t bits
     cdef readonly uint32_t nonce
     cdef readonly uint32_t txn_count
-    def __cinit__(self, version, prev_block, merkle_root,
-                 block_hash, timestamp, bits, nonce,
-                 txn_count):
+    def __cinit__(self, int32_t version, bytes prev_block,
+                  bytes merkle_root, bytes block_hash, uint32_t timestamp,uint32_t bits, uint32_t nonce,
+                 uint32_t txn_count):
 
         self.version = version
         self.prev_block = prev_block
@@ -422,13 +452,16 @@ cdef class BlockHeader:
         self.bits = bits
         self.nonce = nonce
         self.txn_count = txn_count
-    FIXED_HEADER_BYTES = 80 # 4+32+32+4+4+4
+    def __reduce__(self):
+        return BlockHeader, (self.version, self.prev_block, self.merkle_root, self.block_hash, self.timestamp, self.bits, self.nonce, self.txn_count)
+    DEF FIXED_HEADER_BYTES = 80 # 4+32+32+4+4+4
     FMT = Struct("<i 32s 32s I I I")
+
     @staticmethod
     cdef BlockHeader of_buffer(bytes data, size_t * offset):
         header = data[offset[0]:offset[0]+BlockHeader.FIXED_HEADER_BYTES]
         block_hash = double_sha256(header) 
-        version, prev_block, merkle_root, timestamp, bits, nonce  =  BlockHeader.FMT.unpack( header)
+        version, prev_block, merkle_root, timestamp, bits, nonce  = BlockHeader.FMT.unpack( header)
         offset[0] += BlockHeader.FIXED_HEADER_BYTES
         txn_count = VAR_INT(data, offset)
         return BlockHeader(version, prev_block, merkle_root,
@@ -461,8 +494,10 @@ cdef class BlockHeader:
 
     def __str__(self):
         return "%s Object:\n%s"%(self.__class__.__name__,prettyf(  self.to_dict() ))
-            
-
+ 
+###################
+##      Block    ##
+###################
 cdef class LazyBlock:
     cdef bytes a
     cdef size_t offset
@@ -471,14 +506,18 @@ cdef class LazyBlock:
         self.offset = o
     def __call__(self):
         return Block.of_buffer(self.a, &self.offset)
+    def __reduce__(self):
+        return (self.__class__, (self.a, self.offset))
 cdef class Block:
     cdef readonly BlockHeader header
     cdef readonly LazyTransactions _txns
     cdef readonly uint32_t height
-    def __init__(self, header=None, txns=None):
+    def __init__(self, BlockHeader header, LazyTransactions _txns, uint32_t height = -1):
         self.header = header
-        self._txns = txns
-        self.height = -1
+        self._txns = _txns
+        self.height = height
+    def __reduce__(self):
+        return Block, (self.header, self._txns, self.height)
     cdef setHeight(self, h):
         self.height = h
     property txns:
