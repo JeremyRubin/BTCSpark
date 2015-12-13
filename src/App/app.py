@@ -1,7 +1,7 @@
 
 from pyspark import SparkContext, SparkConf
 from pyspark.streaming import StreamingContext
-from BTCLib.lazy_blockchain import *
+from BTCLib.blockchain import *
 from BTCLib.bitcoinscript import Script
 from os import urandom
 import os
@@ -77,25 +77,71 @@ if __name__ == "__main__":
     # sb.no_warn()
     block_objs = sb.fetch_chain()
 
-    sys.setrecursionlimit(10**6)
-    parent_child = block_objs.map(lambda b: b()).map(lambda b: ( b.header.prev_block, b.header.block_hash)).collect()
-    chain = dict((child, Node(parent, child)) for parent, child in parent_child)
-    for _, v in chain.iteritems():
-        v.set_height(chain) 
-    height, longest = max((v.height, v) for _, v in chain.iteritems)
+    # sys.setrecursionlimit(10**6)
+    # parent_child = block_objs.map(lambda b: b()).map(lambda b: ( b.header.prev_block, b.header.block_hash)).collect()
+    # chain = dict((child, Node(parent, child)) for parent, child in parent_child)
+    # for _, v in chain.iteritems():
+    #     v.set_height(chain) 
+    # height, longest = max((v.height, v) for _, v in chain.iteritems)
 
 
-    print height, longest
+    # print height, longest
 
 
+    # txns = block_objs.flatMap(lambda b: 
+    #                       b.txns)
+    # # Transaction Output Amount Distribution
+    # txns.flatMap(lambda txn:
+    #              map(lambda txo:
+    #                  ((txo.value>>14)<<14, 1),
+    #              txn.tx_outs))\
+    #     .reduceByKey(lambda x,y: x+y)\
+    #     .saveAsTextFile(result_name("txouts_values"))
             
+    # unlazy = lambda x: x()
+    # coinbases = block_objs.map(unlazy)\
+    #                       .map(lambda b: b.txns()[0]().tx_ins()[0]().signature_script)\
+    #                       .filter(lambda f: "BIP100" in f)\
+    #                       .saveAsTextFile(result_name("BIP100_Blocks"))
+    coinbases = block_objs.map(lambda f: f.txns[0].tx_ins[0].signature_script).filter(lambda f: "BIP100" in f)\
+                                                                              .saveAsTextFile(result_name("BIP100_Blocks"))
+    while True:
+        pass
+    txns = block_objs.map(unlazy)\
+                     .flatMap(lambda b: 
+                          b.txns())\
+                     .map(unlazy)
+    # Transaction Output Amount Distribution
+    txns.flatMap(lambda txn:
+                 map(lambda txo:
+                     ((txo.value>>14)<<14, 1),
+                 txn.tx_outs().map(unlazy)))\
+        .reduceByKey(lambda x,y: x+y)\
+        .saveAsTextFile(result_name("txouts_values"))
+    # Precompute
+    get_type_val = lambda txo: (re.sub("<(.*?)>", "<>",
+                                       txo.pk_script_parsed),
+                                txo.value)
+    address_types = txns.flatMap(lambda txn:
+                                 map(get_type_val,
+                                     txn.tx_outs()\
+                                     .map(unlazy)))\
+                        .cache()
 
-    txns = block_objs.flatMap(lambda b: iter(b().txns()))#.cache()
-    """TXOUT DISTRIBUTION"""
-    f = txns.flatMap(lambda txn: txn().tx_outs().map(
-        lambda l_txo: 
-            (lambda txo: (txo.value, 1))(l_txo()))   ).reduceByKey(lambda x,y: x+y)
-    f.saveAsTextFile(result_name("txouts_values.dat"))
+    # How much Bitcoin is held per address type?
+    address_types.reduceByKey(lambda x,y: x+y)\
+                 .saveAsTextFile(result_name("btc_addr_dist"))
+
+    # How many addresses of each type are there?
+    address_types.countByKey()\
+                 .saveAsTextFile(result_name("address_count"))
+
+#     txns = block_objs.flatMap(lambda b: iter(b().txns()))#.cache()
+#     """TXOUT DISTRIBUTION"""
+#     f = txns.flatMap(lambda txn: txn().tx_outs().map(
+#         lambda l_txo: 
+#             (lambda txo: (txo.value, 1))(l_txo()))   ).reduceByKey(lambda x,y: x+y)
+#     f.saveAsTextFile(result_name("txouts_values.dat"))
 
 #    """How many Bitcoin are held in what types of addresses? """
 #    addr_form = lambda x: re.sub("<(.*?)>", "<>", x)

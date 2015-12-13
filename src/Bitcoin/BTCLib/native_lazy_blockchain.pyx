@@ -96,7 +96,7 @@ cdef class LazyTransactionInput:
         return TransactionInput.of_buffer(self.a, &self.offset, self.i)
 
 cdef class TransactionInput:
-    cdef readonly LazyTransactionInputOutPoint previous_output
+    cdef readonly LazyTransactionInputOutPoint _previous_output
     cdef readonly bytes signature_script
     cdef readonly uint32_t sequence
     cdef readonly uint32_t index
@@ -106,8 +106,13 @@ cdef class TransactionInput:
     #    self.signature_script = signature_script
     #    self.sequence = sequence
     #    self.index = index
+    property previous_output:
+        def __get__(self):
+            return self._previous_output()
     def to_dict(self):
-        return dict(previous_output = self.previous_output().to_dict(), signature_script = self.signature_script,sequence= self.sequence,
+        return dict(previous_output = self.previous_output.to_dict(),
+                    signature_script = self.signature_script,
+                    sequence= self.sequence,
                     signature_script_parsed=self.signature_script_parsed)
     property signature_script_parsed:
         def __get__(self):
@@ -119,7 +124,7 @@ cdef class TransactionInput:
     cdef of_buffer(bytes a, size_t * offset,uint32_t index):
         r = TransactionInput()
         r.index = index
-        r.previous_output = LazyTransactionInputOutPoint(a, offset[0])
+        r._previous_output = LazyTransactionInputOutPoint(a, offset[0])
         offset[0] += 36
         l = VAR_INT(a, offset)
         r.signature_script = a[offset[0]:offset[0]+l]
@@ -269,8 +274,8 @@ cdef class LazyTransaction:
         return Transaction.of_buffer(self.a, &self.offset, self.c)
 cdef class Transaction:
     cdef readonly uint64_t tx_in_count, tx_out_count
-    cdef readonly LazyTransactionInputs tx_ins
-    cdef readonly LazyTransactionOutputs tx_outs
+    cdef readonly LazyTransactionInputs _tx_ins
+    cdef readonly LazyTransactionOutputs _tx_outs
     cdef readonly uint32_t lock_time, index, version
     cdef readonly bytes tx_id
     def __cinit__(self, uint32_t version, uint64_t tx_in_count,
@@ -278,19 +283,25 @@ cdef class Transaction:
                  uint32_t lock_time,uint32_t index,bytes tx_id):
         self.version = version
         self.tx_in_count = tx_in_count
-        self.tx_ins = tx_ins
+        self._tx_ins = tx_ins
         self.tx_out_count = tx_out_count
-        self.tx_outs = tx_outs
+        self._tx_outs = tx_outs
         self.lock_time = lock_time
         self.index = index
         self.tx_id = tx_id
+    property tx_ins:
+        def __get__(self):
+            return self._tx_ins()
+    property tx_outs:
+        def __get__(self):
+            return self._tx_outs()
     def to_dict(self):
         return dict(
         version      =  self.version,
         tx_in_count  =  self.tx_in_count,
-        tx_ins        =  map(lambda x: TransactionInput.to_dict(x()),self.tx_ins().to_list()),
+        tx_ins        =  map(lambda x: TransactionInput.to_dict(x()),self.tx_ins.to_list()),
         tx_out_count =  self.tx_out_count,
-        tx_outs       =  map(lambda x: TransactionOutput.to_dict(x()), self.tx_outs().to_list()),
+        tx_outs       =  map(lambda x: TransactionOutput.to_dict(x()), self.tx_outs.to_list()),
         lock_time    =  self.lock_time,
         tx_id    =  self.tx_id,
         hex_tx_id    =  self.hex_tx_id,
@@ -446,18 +457,21 @@ cdef class LazyBlock:
         return Block.of_buffer(self.a, &self.offset)
 cdef class Block:
     cdef readonly BlockHeader header
-    cdef readonly LazyTransactions txns
+    cdef readonly LazyTransactions _txns
     cdef readonly uint32_t height
     def __init__(self, header=None, txns=None):
         self.header = header
-        self.txns = txns
+        self._txns = txns
         self.height = -1
     cdef setHeight(self, h):
         self.height = h
+    property txns:
+        def __get__(self):
+            return self._txns()
     def to_dict(self):
         return dict(
                 header = self.header.to_dict() ,
-                txns = map(lambda x: Transaction.to_dict(x()),self.txns().to_list()) )
+                txns = map(lambda x: Transaction.to_dict(x()),self.txns.to_list()) )
     def __repr__(self):
         return "<%s instance at %s: %s>"%(self.__class__.__name__,id(self), "hash <%s>, txns <%d>"%(self.header.hex_block_hash, self.header.txn_count))
     def __str__(self):
@@ -498,7 +512,7 @@ cdef class Blocks:
     def of_file(name, iterator=True):
         size = os.path.getsize(name)
         cdef size_t offset = 0
-        with open(name) as f: # this gets rid of some allocations I think!
+        with open(name, 'r') as f: # this gets rid of some allocations I think!
             data = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
             if iterator:
                 return Blocks.of_buffer(data, offset, size)
@@ -509,52 +523,10 @@ cdef class Blocks:
     def of_file_full(name, iterator=True):
         size = os.path.getsize(name)
         cdef size_t offset = 0
-        with open(name) as f: # this gets rid of some allocations I think!
+        with open(name, 'r') as f: # this gets rid of some allocations I think!
             data = f.read()
             if iterator:
                 return Blocks.of_buffer(data, offset, size)
             else:
                 return list(Blocks.of_buffer(data, offset, size))
-
-def main(args):
-    for i in args:
-        # print i
-        e = Blocks.of_file_full(i,  True)
-        a = e.next()
-        z = a()
-
-        print "block meth", dir(z)
-        print z.header
-        b =z.txns()
-        print "txns meth", dir(b)
-        print b
-        print b[0]()
-        "Checking available methods"
-        # print e[0]().txns().to_list()[0]()
-        # txns = block_objs.flatMap(lambda b: 
-        #                   iter(b().txns()))\
-        #                  .map(lambda txn: txn())
-        # # Transaction Output Amount Distribution
-        # txns.flatMap(lambda txn: txn.tx_outs()\
-        #     .map(lambda lazy_txo: lazy_txo())\
-        #     .map(lambda txo: ((txo.value>>14)<<14, 1)))\
-        #     .reduceByKey(lambda x,y: x+y)\
-        #     .saveAsTextFile(result_name("txouts_values"))
-        
-        # print        e
-        # print e
-        # # print e.header
-        # print e.txns
-        # print e.txns[0]
-        # print e.txns[0].tx_ins
-        # print e.txns[0].tx_outs
-
-        # pretty(e["txns"][:2])
-        # e["txns"] = '...'
-        # pretty(e)
-
-
-
-
-
 
