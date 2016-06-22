@@ -7,7 +7,7 @@ What is BTCSpark?
 -----------------
 
 BTCSpark is a layer for accessing the Bitcoin Blockchain from
-[https://github.com/apache/spark](Apache Spark).
+[Apache Spark](https://github.com/apache/spark).
 
 The goal of BTCSpark is to offer high quality, easy to use, performant, and
 free software to Bitcoin developers and analysts.
