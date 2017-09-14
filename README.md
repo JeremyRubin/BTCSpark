@@ -2,7 +2,6 @@
 Bitcoin Spark Framework (BTCSpark)
 ==================================
 
-
 What is BTCSpark?
 -----------------
 
@@ -11,6 +10,8 @@ BTCSpark is a layer for accessing the Bitcoin Blockchain from
 
 The goal of BTCSpark is to offer high quality, easy to use, performant, and
 free software to Bitcoin developers and analysts.
+
+NOTE: BTCSpark is currently unmaintained. BlockSci is a similar project with better performance, available [here](https://github.com/citp/BlockSci).
 
 Benchmarks
 ----------
